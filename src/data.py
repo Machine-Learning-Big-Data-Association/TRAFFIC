@@ -4,7 +4,7 @@ from datetime import datetime
 # ALL DATA CLEANING AND ADDING IN HERE
 
 # gets the data from kaggle using the path and csv
-def get_data(path, csv, rows):    
+def get_csv(path, csv, rows):    
     # gets the data set from kagglehub
     path = kagglehub.dataset_download(path)
     # stores it into dataframe called df
@@ -61,44 +61,52 @@ def add_data(df):
     df.loc[:, "Is_Weekend"] = (df["Day_of_Week"] >= 5).astype(int)
     return df
 
-def load_and_prepare_driver_data(csv_path):
-    df = pd.read_csv(csv_path)
+# does everything
+def do_traffic_data(df):
+    df = clean_data(df)
+    df = add_data(df)
+    return df
 
-    # Mapping full state name → USPS abbreviation
-    state_abbrev = {
-        "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
-        "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
-        "District of Columbia": "DC", "Florida": "FL", "Georgia": "GA", "Hawaii": "HI",
-        "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA",
-        "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME",
-        "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN",
-        "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE",
-        "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ",
-        "New Mexico": "NM", "New York": "NY", "North Carolina": "NC",
-        "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR",
-        "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
-        "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT",
-        "Vermont": "VT", "Virginia": "VA", "Washington": "WA",
-        "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY"
-    }
+# cleans "State" data
+def clean_drivers_data(df):
+    df["State"] = df["State"].str.strip()
+    return df
 
-    # Convert full state names → abbreviations
-    df["State"] = df["State"].map(state_abbrev)
-
-    # Sum drivers across all ages & sexes
+# returns a df of "State", "Total_Drivers"
+def combine_drivers_data(df):
     drivers_state = (
         df.groupby("State")["Drivers"]
         .sum()
         .reset_index()
-        .rename(columns={"Drivers": "Licensed_Drivers"})
+        .rename(columns={"Drivers": "Total_Drivers"})
     )
-
     return drivers_state
 
-
-# does everything
-def do_data(df):
-    df = clean_data(df)
-    df = add_data(df)
+def do_driver_data(df):
+    clean_drivers_data(df)
+    combine_drivers_data(df)
     return df
+
+# def load_and_prepare_driver_data(csv_path):
+#     """
+#     Takes the full drivers dataset (with Year, Sex, Cohort, etc.)
+#     and returns a dataframe with:
+    
+#     State | Licensed_Drivers_Total
+#     """
+#     df = pd.read_csv(csv_path)
+
+#     # Clean state column
+#     df["State"] = df["State"].str.strip()
+
+#     # Group by state and sum drivers across all ages/sexes
+#     drivers_state = (
+#         df.groupby("State")["Drivers"]
+#         .sum()
+#         .reset_index()
+#         .rename(columns={"Drivers": "Total_Drivers"})
+#     )
+
+#     return drivers_state
+
 

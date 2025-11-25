@@ -7,12 +7,16 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_absolute_error
 from mpl_toolkits.basemap import Basemap
 
-from data import get_data
-from data import do_data
-from data import load_and_prepare_driver_data
+from data import get_csv
+from data import do_traffic_data
+from data import do_driver_data
 
-df = get_data("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 100000)
-df = do_data(df)
+df = get_csv("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 1000000)
+df = do_traffic_data(df)
+
+drivers_df = pd.read_csv("data/Licensed_Drivers_by_State__Sex__and_Age_Group__1994_-_2023__DL-22_.csv")
+drivers_df = do_driver_data(drivers_df)
+
 # combines state and county
 group_cols = ["State", "County"]
 # defining how to aggregrate each data
@@ -44,11 +48,11 @@ print("County data ready:", county_df.shape)
 # Load Licensed Driver Data and Merge
 # ============================================================
 
-drivers_df = load_and_prepare_driver_data("data/Licensed_Drivers_by_State__Sex__and_Age_Group__1994_-_2023__DL-22_.csv")
+# drivers_df = load_and_prepare_driver_data("data/Licensed_Drivers_by_State__Sex__and_Age_Group__1994_-_2023__DL-22_.csv")
 # Merge on state
 county_df = county_df.merge(drivers_df, on="State", how="left")
 # Optional: drop states with missing driver info
-county_df = county_df.dropna(subset=["Licensed_Drivers"])
+county_df = county_df.dropna(subset=["Total_Drivers"])
 print("County data with driver counts:", county_df.shape)
 
 # ============================================================
