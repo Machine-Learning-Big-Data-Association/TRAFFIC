@@ -4,7 +4,7 @@ from datetime import datetime
 # ALL DATA CLEANING AND ADDING IN HERE
 
 # gets the data from kaggle using the path and csv
-def get_data(path, csv, rows):    
+def get_csv(path, csv, rows):    
     # gets the data set from kagglehub
     path = kagglehub.dataset_download(path)
     # stores it into dataframe called df
@@ -61,31 +61,52 @@ def add_data(df):
     df.loc[:, "Is_Weekend"] = (df["Day_of_Week"] >= 5).astype(int)
     return df
 
-def load_and_prepare_driver_data(csv_path):
-    """
-    Takes the full drivers dataset (with Year, Sex, Cohort, etc.)
-    and returns a dataframe with:
-    
-    State | Licensed_Drivers_Total
-    """
-    df = pd.read_csv(csv_path)
+# does everything
+def do_traffic_data(df):
+    df = clean_data(df)
+    df = add_data(df)
+    return df
 
-    # Clean state column
+# cleans "State" data
+def clean_drivers_data(df):
     df["State"] = df["State"].str.strip()
+    return df
 
-    # Group by state and sum drivers across all ages/sexes
+# returns a df of "State", "Total_Drivers"
+def combine_drivers_data(df):
     drivers_state = (
         df.groupby("State")["Drivers"]
         .sum()
         .reset_index()
-        .rename(columns={"Drivers": "Licensed_Drivers"})
+        .rename(columns={"Drivers": "Total_Drivers"})
     )
-
     return drivers_state
 
-# does everything
-def do_data(df):
-    df = clean_data(df)
-    df = add_data(df)
+def do_driver_data(df):
+    clean_drivers_data(df)
+    combine_drivers_data(df)
     return df
+
+# def load_and_prepare_driver_data(csv_path):
+#     """
+#     Takes the full drivers dataset (with Year, Sex, Cohort, etc.)
+#     and returns a dataframe with:
+    
+#     State | Licensed_Drivers_Total
+#     """
+#     df = pd.read_csv(csv_path)
+
+#     # Clean state column
+#     df["State"] = df["State"].str.strip()
+
+#     # Group by state and sum drivers across all ages/sexes
+#     drivers_state = (
+#         df.groupby("State")["Drivers"]
+#         .sum()
+#         .reset_index()
+#         .rename(columns={"Drivers": "Total_Drivers"})
+#     )
+
+#     return drivers_state
+
 

@@ -7,11 +7,15 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_absolute_error
 from mpl_toolkits.basemap import Basemap
 
-from data import get_data
-from data import do_data
+from data import get_csv
+from data import do_traffic_data
+from data import do_driver_data
 
-df = get_data("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 1000000)
-df = do_data(df)
+df = get_csv("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 1000000)
+df = do_traffic_data(df)
+
+drivers_df = pd.read_csv("data/Licensed_Drivers_by_State__Sex__and_Age_Group__1994_-_2023__DL-22_.csv")
+drivers_df = do_driver_data(drivers_df)
 
 # combines state and county
 group_cols = ["State", "County"]
@@ -26,21 +30,30 @@ agg_dict = {
     "Is_Night": "mean",
     "Is_Weekend": "mean"
 }
-
 # make a smaller data frame to hold data above
 cols_to_keep = list(set(group_cols + list(agg_dict.keys())))
 df_small = df[cols_to_keep].copy()
-
 # groups smaller data set into counties and states
 county_df = df_small.groupby(group_cols).agg(agg_dict).reset_index()
 # aggregates the data according to previous aggregation rules
 county_df = county_df.rename(columns={"ID": "Total_Accidents"})
-
-
-county_df = county_df.dropna(subset=["total_accidents"])
+county_df = county_df.dropna(subset=["Total_Accidents"])
+# creates a collumn features 
 feature_cols = [c for c in county_df.columns if c not in ["State", "County", "Total_Accidents"]]
+# removes anything not containing a feature
 county_df = county_df.dropna(subset=feature_cols)
 print("County data ready:", county_df.shape)
+
+# ============================================================
+# Load Licensed Driver Data and Merge
+# ============================================================
+
+# drivers_df = load_and_prepare_driver_data("data/Licensed_Drivers_by_State__Sex__and_Age_Group__1994_-_2023__DL-22_.csv")
+# Merge on state
+county_df = county_df.merge(drivers_df, on="State", how="left")
+# Optional: drop states with missing driver info
+county_df = county_df.dropna(subset=["Total_Drivers"])
+print("County data with driver counts:", county_df.shape)
 
 # ============================================================
 # 4. Train-test split
@@ -58,7 +71,6 @@ X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
 
 rf = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
 rf.fit(X_train, y_train)
-
 y_pred_test = rf.predict(X_test)
 print("R² on test:", r2_score(y_test, y_pred_test))
 print("MAE on test:", mean_absolute_error(y_test, y_pred_test))
@@ -90,13 +102,11 @@ county_coords = df.groupby(["State", "County"]).agg({
     "Start_Lat": "mean",
     "Start_Lng": "mean"
 }).reset_index()
-
 plot_df = county_df.merge(county_coords, on=["State", "County"])
 
 # Handle extreme outliers
 vmax = np.percentile(plot_df["risk_score"], 99)
 colors = np.clip(plot_df["risk_score"], None, vmax)
-
 plt.figure(figsize=(14,8))
 m = Basemap(
      llcrnrlon=-125,  # moved a bit west
@@ -110,16 +120,13 @@ m = Basemap(
 m.drawcoastlines()
 m.drawcountries()
 m.drawstates()
-
 x, y = m(plot_df["Start_Lng"].values, plot_df["Start_Lat"].values)
-
 base_size = 150
 
 # Normalize risk for colormap
 norm = matplotlib.colors.Normalize(vmin=0, vmax=vmax)
 cmap = plt.cm.Reds
 colors_mapped = cmap(norm(colors))
-
 ax = plt.gca()
 
 # Plot gradient circles
@@ -132,11 +139,10 @@ for i in range(len(x)):
             alpha=alpha,
             edgecolors='none'
         )
-
+        
 # Add colorbar
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
 cb = plt.colorbar(sm, ax=ax, label="Risk Score (0-100, clipped at 99th percentile)")
-
 plt.title("US Accident Risk Bubble Map with Gradient Circles")
 plt.show()
