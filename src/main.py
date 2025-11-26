@@ -20,63 +20,182 @@ def train(nEsimator, randomState, nJobs, xTrain, yTrain, xTest, yTest):
     return rf
 
 def makeMap(df, county_df, title_suffix=""):
+    """
+    Create a choropleth map with counties filled by risk score using geopandas
+    """
+    try:
+        import geopandas as gpd
+        from matplotlib.patches import Rectangle
+        
+        # Download US county shapefile from census.gov
+        # Using a URL that works with geopandas
+        url = "https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_county_5m.zip"
+        
+        print(f"Loading county boundaries...")
+        counties_gdf = gpd.read_file(url)
+        
+        # Prepare our data for merging
+        plot_df = county_df.copy()
+        
+        # Clean county names for matching
+        plot_df['County_Match'] = plot_df['County'].str.upper().str.strip()
+        plot_df['State_Match'] = plot_df['State'].str.upper().str.strip()
+        
+        counties_gdf['County_Match'] = counties_gdf['NAME'].str.upper().str.strip()
+        
+        # Create state name to FIPS mapping
+        state_fips = {
+            '01': 'ALABAMA', '02': 'ALASKA', '04': 'ARIZONA', '05': 'ARKANSAS',
+            '06': 'CALIFORNIA', '08': 'COLORADO', '09': 'CONNECTICUT', '10': 'DELAWARE',
+            '11': 'DISTRICT OF COLUMBIA', '12': 'FLORIDA', '13': 'GEORGIA', '15': 'HAWAII',
+            '16': 'IDAHO', '17': 'ILLINOIS', '18': 'INDIANA', '19': 'IOWA',
+            '20': 'KANSAS', '21': 'KENTUCKY', '22': 'LOUISIANA', '23': 'MAINE',
+            '24': 'MARYLAND', '25': 'MASSACHUSETTS', '26': 'MICHIGAN', '27': 'MINNESOTA',
+            '28': 'MISSISSIPPI', '29': 'MISSOURI', '30': 'MONTANA', '31': 'NEBRASKA',
+            '32': 'NEVADA', '33': 'NEW HAMPSHIRE', '34': 'NEW JERSEY', '35': 'NEW MEXICO',
+            '36': 'NEW YORK', '37': 'NORTH CAROLINA', '38': 'NORTH DAKOTA', '39': 'OHIO',
+            '40': 'OKLAHOMA', '41': 'OREGON', '42': 'PENNSYLVANIA', '44': 'RHODE ISLAND',
+            '45': 'SOUTH CAROLINA', '46': 'SOUTH DAKOTA', '47': 'TENNESSEE', '48': 'TEXAS',
+            '49': 'UTAH', '50': 'VERMONT', '51': 'VIRGINIA', '53': 'WASHINGTON',
+            '54': 'WEST VIRGINIA', '55': 'WISCONSIN', '56': 'WYOMING', '72': 'PUERTO RICO'
+        }
+        
+        counties_gdf['State_Match'] = counties_gdf['STATEFP'].map(state_fips)
+        
+        # Merge with our risk data
+        counties_gdf = counties_gdf.merge(
+            plot_df[['State_Match', 'County_Match', 'risk_score', 'Accidents_Per_1000']],
+            on=['State_Match', 'County_Match'],
+            how='left'
+        )
+        
+        # Filter to continental US
+        counties_gdf = counties_gdf[~counties_gdf['STATEFP'].isin(['02', '15', '72'])]
+        
+        # Create the plot with much larger size
+        fig, ax = plt.subplots(figsize=(18, 10), dpi=100)
+        
+        # Handle extreme outliers
+        vmax = np.percentile(plot_df["risk_score"], 99)
+        
+        # Plot all counties (gray for those without data)
+        counties_gdf.plot(ax=ax, color='lightgray', edgecolor='white', linewidth=0.5)
+        
+        # Plot counties with data
+        counties_with_data = counties_gdf[counties_gdf['risk_score'].notna()]
+        counties_with_data.plot(
+            ax=ax,
+            column='risk_score',
+            cmap='Reds',
+            edgecolor='black',
+            linewidth=0.5,
+            legend=False,
+            vmin=0,
+            vmax=vmax
+        )
+        
+        # Add colorbar
+        norm = matplotlib.colors.Normalize(vmin=0, vmax=vmax)
+        sm = plt.cm.ScalarMappable(cmap='Reds', norm=norm)
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, fraction=0.025, pad=0.04, shrink=0.8)
+        cbar.set_label('Risk Score (0-100)', fontsize=16, fontweight='bold')
+        cbar.ax.tick_params(labelsize=14)
+        
+        # Remove axis
+        ax.set_axis_off()
+        
+        # Add title
+        plt.title(
+            f"US Accident Risk by County {title_suffix}\n"
+            f"{len(plot_df)} counties with data | "
+            f"Avg: {plot_df['Accidents_Per_1000'].mean():.2f} accidents per 1000 people 16+",
+            fontsize=20, pad=30, fontweight='bold'
+        )
+        
+        plt.tight_layout()
+        
+        # Maximize window
+        mng = plt.get_current_fig_manager()
+        try:
+            mng.window.state('zoomed')  # Windows
+        except:
+            try:
+                mng.frame.Maximize(True)  # Alternative
+            except:
+                pass
+        
+        plt.show()
+        
+        print(f"Successfully plotted {len(counties_with_data)} counties with risk data")
+        
+    except ImportError:
+        print("ERROR: geopandas not installed. Install with: pip install geopandas")
+        print("Falling back to simple scatter plot...")
+        makeMap_fallback(df, county_df, title_suffix)
+    except Exception as e:
+        print(f"ERROR loading shapefiles: {e}")
+        print("Falling back to simple scatter plot...")
+        makeMap_fallback(df, county_df, title_suffix)
+    
+    return None
+
+def makeMap_fallback(df, county_df, title_suffix=""):
+    """Fallback map using circles if geopandas fails"""
     county_coords = df.groupby(["State", "County"]).agg({
         "Start_Lat": "mean",
         "Start_Lng": "mean"
     }).reset_index()
     
     plot_df = county_df.merge(county_coords, on=["State", "County"])
-    
-    # Handle extreme outliers
     vmax = np.percentile(plot_df["risk_score"], 99)
-    colors = np.clip(plot_df["risk_score"], None, vmax)
     
-    plt.figure(figsize=(14,8))
+    plt.figure(figsize=(28, 18), dpi=100)
     m = Basemap(
-        llcrnrlon=-125,
-        llcrnrlat=20,
-        urcrnrlon=-65,
-        urcrnrlat=52,
-        projection='lcc',
-        lat_1=33,
-        lat_2=45,
-        lon_0=-95
+        llcrnrlon=-125, llcrnrlat=24, urcrnrlon=-66, urcrnrlat=50,
+        projection='lcc', lat_1=33, lat_2=45, lon_0=-95, resolution='i'
     )
     
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawcounties()
-    m.drawstates()
+    m.drawcoastlines(linewidth=1.2)
+    m.drawcountries(linewidth=1.5)
+    m.drawstates(linewidth=1.5, color='black')
     
-    x, y = m(plot_df["Start_Lng"].values, plot_df["Start_Lat"].values)
-    base_size = 50
-    
-    # Normalize risk for colormap
     norm = matplotlib.colors.Normalize(vmin=0, vmax=vmax)
     cmap = plt.cm.Reds
-    colors_mapped = cmap(norm(colors))
     
-    ax = plt.gca()
+    x, y = m(plot_df["Start_Lng"].values, plot_df["Start_Lat"].values)
     
-    # Plot gradient circles
     for i in range(len(x)):
-        for alpha, scale in zip([0.4, 0.2, 0.1], [1.0, 1.5, 2.0]):
-            m.scatter(
-                x[i], y[i],
-                s=base_size * scale,
-                color=colors_mapped[i],
-                alpha=alpha,
-                edgecolors='none'
-            )
+        risk = np.clip(plot_df["risk_score"].iloc[i], 0, vmax)
+        color = cmap(norm(risk))
+        m.scatter(x[i], y[i], s=3000, color=color, alpha=0.7, 
+                 edgecolors='black', linewidths=2, zorder=5)
     
-    # Add colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cb = plt.colorbar(sm, ax=ax, label="Risk Score (0-100, clipped at 99th percentile)")
+    cbar = plt.colorbar(sm, ax=plt.gca(), label="Risk Score (0-100)", shrink=0.7, pad=0.04)
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_label('Risk Score (0-100)', fontsize=16, fontweight='bold')
     
-    plt.title(f"US Accident Risk Per Capita {title_suffix}")
+    plt.title(
+        f"US Accident Risk by County {title_suffix}\n"
+        f"{len(plot_df)} counties | Avg: {plot_df['Accidents_Per_1000'].mean():.2f} accidents per 1000 people 16+",
+        fontsize=20, pad=30, fontweight='bold'
+    )
+    
+    plt.tight_layout()
+    
+    # Maximize window
+    mng = plt.get_current_fig_manager()
+    try:
+        mng.window.state('zoomed')  # Windows
+    except:
+        try:
+            mng.frame.Maximize(True)  # Alternative
+        except:
+            pass
+    
     plt.show()
-    return None
 
 def clean(df, group_cols, agg_dict):
     # make a smaller data frame to hold data above cols
@@ -101,7 +220,7 @@ def clean(df, group_cols, agg_dict):
 
 def main():
     # Load and clean accident data
-    df = get_csv("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 10000000)  # Increase to 100k for better coverage
+    df = get_csv("sobhanmoosavi/us-accidents", "/US_Accidents_March23.csv", 100000000)  # Increase to 100k for better coverage
     df = do_traffic_data(df)
     
     print(f"\nTotal accidents loaded: {len(df)}")
