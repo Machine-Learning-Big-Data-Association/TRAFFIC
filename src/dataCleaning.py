@@ -18,9 +18,6 @@ def time_data(df):
     df["Start_Time"] = pd.to_datetime(df["Start_Time"], errors="coerce")
     df = df.loc[df["Start_Time"].notna()]
 
-    # Probably not needed ?? VVVVV
-    # b/c we alr convert start time and just use that?? either way cleans out any unreadable end times
-
     # attempts to convert data into date time format deletes if unable to
     df["End_Time"] = pd.to_datetime(df["End_Time"], errors="coerce")
     df = df.loc[df["End_Time"].notna()]
@@ -61,17 +58,31 @@ def add_data(df):
     df.loc[:, "Is_Weekend"] = (df["Day_of_Week"] >= 5).astype(int)
     return df
 
-# does everything
-def do_traffic_data(df):
-    df = clean_data(df)
-    df = add_data(df)
-    return df
-
 # cleans "State" data
 def clean_drivers_data(df):
     df["State"] = df["State"].str.strip()
+    df = normalize_Abbreviations(df)
     return df
 
+def normalize_Abbreviations(df):
+    state_abbrev = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+    'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+    'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+    'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+    'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+    'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+    'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+    'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+    'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
+}
+    # Normalize the State column
+    df["State"] = df["State"].map(state_abbrev)
+    return df
 # returns a df of "State", "Total_Drivers"
 def combine_drivers_data(df):
     drivers_state = (
@@ -83,30 +94,10 @@ def combine_drivers_data(df):
     return drivers_state
 
 def do_driver_data(df):
-    clean_drivers_data(df)
-    combine_drivers_data(df)
+    df = clean_drivers_data(df)
+    df = combine_drivers_data(df)
     return df
-
-# def load_and_prepare_driver_data(csv_path):
-#     """
-#     Takes the full drivers dataset (with Year, Sex, Cohort, etc.)
-#     and returns a dataframe with:
-    
-#     State | Licensed_Drivers_Total
-#     """
-#     df = pd.read_csv(csv_path)
-
-#     # Clean state column
-#     df["State"] = df["State"].str.strip()
-
-#     # Group by state and sum drivers across all ages/sexes
-#     drivers_state = (
-#         df.groupby("State")["Drivers"]
-#         .sum()
-#         .reset_index()
-#         .rename(columns={"Drivers": "Total_Drivers"})
-#     )
-
-#     return drivers_state
-
-
+def do_traffic_data(df):
+    df = clean_data(df)
+    df = add_data(df)
+    return df
