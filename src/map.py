@@ -169,6 +169,24 @@ def makeMap2030PopulationGrowth(df, county_df, title_suffix=""):
     plot_map(merged, "Population_Growth_2020_to_2030",
              f"Predicted Driver Growth (2030) {title_suffix}", 95)
     
+def makeMap2030RiskScore(df, county_df, title_suffix=""):
+    counties = load_counties()
+
+    plot_df = county_df.copy()
+    plot_df["County_Match"] = plot_df["County"].str.upper().str.strip()
+    plot_df["State_Match"] = plot_df["State"].str.upper().str.strip()
+
+    merged = counties.merge(
+        plot_df[["State_Match", "County_Match", "risk_score_2030"]],
+        on=["State_Match", "County_Match"],
+        how="left"
+    )
+
+    plot_map(merged, "risk_score_2030",
+             f"US Accident Risk by County (2030) {title_suffix}", 99)
+
+
+
 def makeMap2030PopulationGrowthPercentage(df, county_df, title_suffix=""):
     counties = load_counties()
 

@@ -5,12 +5,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_absolute_error
 import map
+import train
 from dataCleaning import get_csv
 from dataCleaning import do_traffic_data
 from dataCleaning import do_driver_data
-from train import clean
-from train import train
-from train import predictRisk
 
 def main():
     # Load and clean accident data
@@ -22,7 +20,8 @@ def main():
     print(f"Using 2020 data only: {len(df)} accidents")
 
     # Skip the header rows and use proper column names
-    drivers_df = pd.read_excel("TRAFFIC/data/counties-agegroup-2020.xlsx", skiprows=5)
+    drivers_df = pd.read_excel("data\counties-agegroup-2020.xlsx", skiprows=5)
+
     drivers_df = do_driver_data(drivers_df)
     
     # Define grouping and aggregation
@@ -38,7 +37,7 @@ def main():
         "Is_Weekend": "mean"
     }
 
-    county_df, feature_cols = clean(df, group_cols, agg_dict)
+    county_df, feature_cols = train.clean(df, group_cols, agg_dict)
     
     # ============================================================
     # Merge with driver data (people 16+)
@@ -85,13 +84,13 @@ def main():
     # Train Random Forest
     # ============================================================
     print("\n=== Training Per-Capita Accident Model (2020 Data) ===")
-    rf = train(200, 42, -1, X_train, y_train, X_test, y_test)
+    rf = train.train(200, 42, -1, X_train, y_train, X_test, y_test)
     
     # ============================================================
     # Predict risk (based on accidents per capita)
     # ============================================================
     print("\n=== Predicting Risk Scores ===")
-    predictRisk(rf, county_df, X)
+    train.predictRisk(rf, county_df, X)
     
     # ============================================================
     # Feature Importance
@@ -120,88 +119,36 @@ def main():
     bottom_risk = county_df.sort_values("Accidents_Per_1000", ascending=True).head(top_n)
     print(bottom_risk[["State", "County", "Total_Accidents", "Total_People_16_plus", "Accidents_Per_1000", "risk_score"]])
     
-# ============================================================
-# Predict 2030 using Linear Regression
-# ============================================================
+    # ============================================================
+    # Predict 2030 using Linear Regression
+    # ============================================================
+    county_df = train.LinearRegression2030(county_df, feature_cols)
+    
+    # Add population as a feature
+    feature_cols_extended = feature_cols + ["Population_Growth_2020_to_2030"]
+    
+    # ============================================================
+    # Train-test split - predict accidents per capita
+    # ============================================================
 
-    county_df["Projected_2030_Population_16_plus"] = (
-        county_df["Total_People_16_plus"] + 
-        county_df["Total_Decade_Population_Change"]
+    X = county_df[feature_cols_extended].values
+    y = county_df["Predicted_2030_Accidents_Total"].values
+    
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
+        X, y, county_df.index, test_size=0.2, random_state=42
     )
-
-    # Make sure projected population is not negative
-    county_df["Projected_2030_Population_16_plus"] = county_df["Projected_2030_Population_16_plus"].clip(lower=0)
-
-    print("Training Linear Regression model for 2030 predictions...")
-
-    # Create features for training (using 2020 data)
-    X_train_lr = np.column_stack([
-        county_df[feature_cols].values,
-        county_df["Total_People_16_plus"].values
-    ])
-
-    # Target: accidents per capita in 2020
-    y_train_lr = county_df["Accidents_Per_1000"].values
-
-    # Train Linear Regression model
-    lr_model = LinearRegression()
-    lr_model.fit(X_train_lr, y_train_lr)
-
-    # Check model performance on training data
-    y_pred_train_lr = lr_model.predict(X_train_lr)
-    print(f"Linear Regression R² on training data: {r2_score(y_train_lr, y_pred_train_lr):.4f}")
-    print(f"Linear Regression MAE on training data: {mean_absolute_error(y_train_lr, y_pred_train_lr):.4f}")
-
-    # 3. Create features for 2030 prediction
-    # Use same environmental features but with projected population
-    X_2030 = np.column_stack([
-        county_df[feature_cols].values,
-        county_df["Projected_2030_Population_16_plus"].values
-    ])
-
-    # Predict per-capita accidents for 2030 using Linear Regression
-    # This gives us accidents per 1000 people
-    predicted_per_capita_2030 = lr_model.predict(X_2030)
-
-    # Ensure predictions are non-negative
-    predicted_per_capita_2030 = np.maximum(predicted_per_capita_2030, 0)
-
-    # Store the per-capita prediction
-    county_df["Predicted_2030_Accidents_PerCapita"] = predicted_per_capita_2030
-
-    # Convert to total accidents
-    # Formula: (accidents per 1000) * (population / 1000)
-    county_df["Predicted_2030_Accidents_Total"] = (
-        predicted_per_capita_2030 * 
-        (county_df["Projected_2030_Population_16_plus"] / 1000)
-    )
-
-    # 4. Calculate growth metrics
-    county_df["Accident_Growth_2020_to_2030"] = (
-        county_df["Predicted_2030_Accidents_Total"] - county_df["Total_Accidents"]
-    )
-
-    county_df["Accident_Growth_Percentage"] = (
-        (county_df["Accident_Growth_2020_to_2030"] / county_df["Total_Accidents"]) * 100
-    )
-
-    county_df["Population_Growth_2020_to_2030"] = (
-        county_df["Projected_2030_Population_16_plus"] - county_df["Total_People_16_plus"]
-    )
-
-    county_df["Population_Growth_Percentage"] = (
-        (county_df["Population_Growth_2020_to_2030"] / county_df["Total_People_16_plus"]) * 100
-    )
-
-    # 5. Print Linear Regression coefficients for interpretation
-    print("\n=== Linear Regression Coefficients ===")
-    feature_names_extended = feature_cols + ["Total_People_16_plus"]
-    coef_df = pd.DataFrame({
-        'Feature': feature_names_extended,
-        'Coefficient': lr_model.coef_
-    }).sort_values('Coefficient', key=abs, ascending=False)
-    print(coef_df)
-    print(f"\nIntercept: {lr_model.intercept_:.4f}")
+    
+    # ============================================================
+    # Train Random Forest
+    # ============================================================
+    print("\n=== Training Per-Capita Accident Model (2020 Data) ===")
+    rf = train.train(200, 42, -1, X_train, y_train, X_test, y_test)
+    
+    # ============================================================
+    # Predict risk (based on accidents per capita)
+    # ============================================================
+    print("\n=== Predicting Risk Scores ===")
+    train.predictRisk2030(rf, county_df, X)
     
     # ============================================================
     # Plot US bubble map
@@ -210,6 +157,7 @@ def main():
     map.makeMap(df, county_df, title_suffix="")
     map.makeMapTotal(df, county_df, title_suffix="")
     map.makeMap2030Total(df, county_df, title_suffix="")
+    map.makeMap2030RiskScore(df, county_df, title_suffix="")
     map.makeMap2030AccidentsGrowthPercentage(df, county_df, title_suffix="")
     map.makeMap2030PopulationGrowthPercentage(df, county_df, title_suffix="")
     map.makeMap2030PopulationGrowth(df, county_df, title_suffix="")
