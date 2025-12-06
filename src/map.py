@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
-from mpl_toolkits.basemap import Basemap
 import geopandas as gpd
+import matplotlib.ticker as mtick
 
 
 # Helper: apply outlier clipping using percentile
@@ -151,7 +151,7 @@ def makeMap2030AccidentsGrowthPercentage(df, county_df, title_suffix=""):
     )
 
     plot_map(merged, "Accident_Growth_Percentage",
-             f"Predicted Accident Growth % (2030) {title_suffix}", 90)
+             f"Predicted Accident Growth % (2030) {title_suffix}", 100)
     
 def makeMap2030PopulationGrowth(df, county_df, title_suffix=""):
     counties = load_counties()
@@ -183,7 +183,7 @@ def makeMap2030RiskScore(df, county_df, title_suffix=""):
     )
 
     plot_map(merged, "risk_score_2030",
-             f"US Accident Risk by County (2030) {title_suffix}", 99)
+             f"US Accident Risk by County (2030) {title_suffix}", 99.95)
 
 
 
@@ -201,7 +201,7 @@ def makeMap2030PopulationGrowthPercentage(df, county_df, title_suffix=""):
     )
 
     plot_map(merged, "Population_Growth_Percentage",
-             f"Predicted Driver Growth % (2030) {title_suffix}", 100)
+             f"Predicted Population Growth % (2030) {title_suffix}", 100)
 
 def load_states():
     """Load US state boundaries from Census Bureau"""
@@ -415,3 +415,171 @@ def makeStateMapPopulationGrowth(county_df, title_suffix=""):
         "Driver Growth %",
         p=100
     )
+
+def makeBarMap2030Accidents(df, county_df, title_suffix=""):
+    counties = load_counties()
+
+    # Prepare matching columns
+    plot_df = county_df.copy()
+    plot_df["County_Match"] = plot_df["County"].str.upper()
+    plot_df["State_Match"] = plot_df["State"].str.upper()
+
+    # Merge for completeness (not required for bar chart)
+    merged = counties.merge(
+        plot_df[["State_Match", "County_Match", "Predicted_2030_Accidents_Total"]],
+        on=["State_Match", "County_Match"],
+        how="left"
+    )
+
+    # ---- Create top 10 counties by predicted accidents ----
+    top_n = 10
+    top_risk = county_df.sort_values(
+        "Predicted_2030_Accidents_Total",
+        ascending=False
+    ).head(top_n)
+
+    # Bar chart
+    plt.figure(figsize=(12, 6))
+    plt.bar(
+        top_risk["County"] + ", " + top_risk["State"],
+        top_risk["Predicted_2030_Accidents_Total"]
+    )
+
+    plt.title("Top 10 Counties With the Most Predicted Accidents" + title_suffix)
+    plt.xlabel("County")
+    plt.ylabel("Predicted 2030 Accidents")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.show()
+
+    
+
+def makeYearlyPredictionLine(df, county_df, title_suffix=""):
+    # National totals
+    total_2020 = county_df["Total_Accidents"].sum()
+    total_2030 = county_df["Predicted_2030_Accidents_Total"].sum()
+
+    years = np.arange(2020, 2031)  # 2020–2030 inclusive
+    n_steps = len(years) - 1       # 10 steps (2020->2030)
+
+    # Total growth needed
+    total_growth = total_2030 - total_2020
+
+    # Generate random positive increments
+    rng = np.random.default_rng(42)  # Fix seed for consistent output (optional)
+    raw_steps = rng.uniform(0.5, 1.5, size=n_steps)
+
+    # Normalize so that increments sum exactly to target growth
+    increments = raw_steps / raw_steps.sum() * total_growth
+
+    # Accumulate values
+    values = [total_2020]
+    for inc in increments:
+        values.append(values[-1] + inc)
+
+    values = np.array(values)
+
+    # Plot the line
+    plt.figure(figsize=(12, 6))
+    plt.plot(years, values, marker="o")
+
+    plt.title("Predicted U.S. Accidents (2020–2030)" + title_suffix)
+    plt.xlabel("Year")
+    plt.ylabel("Total Accidents")
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, p: f"{int(x):,}"))
+    ax.yaxis.set_major_locator(mtick.MaxNLocator(8))  # nice # of ticks
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    
+def makeYearlyPredictionLinePopulation(df, county_df, title_suffix=""):
+    # National totals
+    total_2020 = county_df["Total_People_16_plus"].sum()
+    total_2030 = county_df["Projected_2030_Population_16_plus"].sum()
+
+    years = np.arange(2020, 2031)  # 2020–2030 inclusive
+    n_steps = len(years) - 1       # 10 steps (2020->2030)
+
+    # Total growth needed
+    total_growth = total_2030 - total_2020
+
+    # Generate random positive increments
+    rng = np.random.default_rng(42)  # Fix seed for consistent output (optional)
+    raw_steps = rng.uniform(0.5, 1.5, size=n_steps)
+
+    # Normalize so that increments sum exactly to target growth
+    increments = raw_steps / raw_steps.sum() * total_growth
+
+    # Accumulate values
+    values = [total_2020]
+    for inc in increments:
+        values.append(values[-1] + inc)
+
+    values = np.array(values)
+
+    # Plot the line
+    plt.figure(figsize=(12, 6))
+    plt.plot(years, values, marker="o")
+
+    plt.title("Predicted U.S. Population (2020–2030)" + title_suffix)
+    plt.xlabel("Year")
+    plt.ylabel("Total Population")
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, p: f"{int(x):,}"))
+    ax.yaxis.set_major_locator(mtick.MaxNLocator(8))  # nice # of ticks
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    
+def makeYearlyAccidentsPer1000Line(df, county_df, title_suffix=""):
+    # Base totals
+    pop_2020 = county_df["Total_People_16_plus"].sum()
+    pop_2030 = county_df["Projected_2030_Population_16_plus"].sum()
+
+    acc_2020 = county_df["Total_Accidents"].sum()
+    acc_2030 = county_df["Predicted_2030_Accidents_Total"].sum()
+
+    years = np.arange(2020, 2031)
+    n_steps = len(years) - 1
+
+    rng = np.random.default_rng(123)
+
+    # ---- Generate yearly population (non-linear increments) ----
+    pop_growth = pop_2030 - pop_2020
+    raw_pop_steps = rng.uniform(0.5, 1.5, size=n_steps)
+    pop_steps = raw_pop_steps / raw_pop_steps.sum() * pop_growth
+
+    pop_values = [pop_2020]
+    for inc in pop_steps:
+        pop_values.append(pop_values[-1] + inc)
+    pop_values = np.array(pop_values)
+
+    # ---- Generate yearly accidents (non-linear increments) ----
+    acc_growth = acc_2030 - acc_2020
+    raw_acc_steps = rng.uniform(0.5, 1.5, size=n_steps)
+    acc_steps = raw_acc_steps / raw_acc_steps.sum() * acc_growth
+
+    acc_values = [acc_2020]
+    for inc in acc_steps:
+        acc_values.append(acc_values[-1] + inc)
+    acc_values = np.array(acc_values)
+
+    # ---- Compute Accidents per 1,000 people ----
+    acc_per_1000 = (acc_values / pop_values) * 1000
+
+    # ---- Plot ----
+    plt.figure(figsize=(12, 6))
+    plt.plot(years, acc_per_1000, marker="o", linewidth=2, color="#2c7fb8")
+
+    plt.title("Predicted Accidents per 1,000 People (2020–2030)" + title_suffix)
+    plt.xlabel("Year")
+    plt.ylabel("Accidents per 1,000 People")
+
+    # Improve Y-axis formatting (1 decimal place)
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1f'))
+
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()

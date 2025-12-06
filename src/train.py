@@ -160,8 +160,10 @@ def LinearRegression2030(county_df, feature_cols):
     )
 
     county_df["Accident_Growth_Percentage"] = (
-        (county_df["Accident_Growth_2020_to_2030"] / county_df["Total_Accidents"]) * 100
-    )
+    county_df["Accident_Growth_2020_to_2030"] /
+    ((county_df["Predicted_2030_Accidents_Total"] + county_df["Total_Accidents"]) / 2)
+    ) * 100
+
 
     county_df["Population_Growth_2020_to_2030"] = (
         county_df["Projected_2030_Population_16_plus"] - county_df["Total_People_16_plus"]
