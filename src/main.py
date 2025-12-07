@@ -15,7 +15,7 @@ def main():
     df = df[df["Start_Time"].dt.year == 2020]
     
     # Skip the header rows and use proper column names
-    drivers_df = pd.read_excel("data\counties-agegroup-2020.xlsx", skiprows=5)
+    drivers_df = pd.read_excel("data/counties-agegroup-2020.xlsx", skiprows=5)
 
     drivers_df = do_driver_data(drivers_df)
     
